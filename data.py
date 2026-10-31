@@ -1,11 +1,11 @@
 from asciimatics.screen import Screen
-import render as rd
-import datetime
+import datetime, json, render as rd
 
 class Graph:
-    def __init__(self, screen: Screen, step : int = 60) -> None:
+    def __init__(self, screen: Screen) -> None:
 
-        self.step : int = step
+        with open("config.jsonc") as f:
+            self.step : int = json.load(f)["market"]["slice"]
         self.data : dict = {}
         
         self.screen : Screen = screen
