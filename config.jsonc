@@ -1,0 +1,14 @@
+{
+    "market": {
+        "product": "BTC-USD",
+        "height": 30,
+        "width": 100,
+        "x": 10,
+        "y": 0
+    },
+    "boxes": {
+        "rounded": true,
+        "color": 7
+    },
+    "frame": 1000
+}
