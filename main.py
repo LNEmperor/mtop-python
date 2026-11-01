@@ -1,5 +1,10 @@
-import asyncio, json, websockets, time, data, threading as th
 from asciimatics.screen import Screen
+import threading as th
+import websockets
+import asyncio
+import json
+import time
+import data
 
 async def update_data(graph: data.Graph, stop: th.Event):
     async with websockets.connect(URL) as ws:
@@ -14,23 +19,23 @@ async def update_data(graph: data.Graph, stop: th.Event):
                 graph.add_data(d)
 
 def main(screen: Screen):
-    
+
     MARKET_GRAPH : data.Graph = data.Graph(screen)
-    
+
     stop = th.Event()
     update = th.Thread(target=(lambda: asyncio.run(update_data(MARKET_GRAPH, stop))))
     update.start()
-    
+
     while True:
         MARKET_GRAPH.render_data()
         time.sleep(FRAME / 1000)
         ev = screen.get_key()
         if ev in [ord('Q'), ord('q')]:
             break
-        
+
     stop.set()
     update.join()
-    
+
     return
 
 if __name__ == "__main__":
@@ -46,5 +51,5 @@ if __name__ == "__main__":
         "product_ids": [PRODUCT],
         "channels": ["ticker"],
     }
-    
+
     Screen.wrapper(main)
