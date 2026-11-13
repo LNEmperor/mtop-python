@@ -1,55 +1,43 @@
 from asciimatics.screen import Screen
-import threading as th
-import websockets
-import asyncio
-import json
+import render as render
 import time
-import data
 
-async def update_data(graph: data.Graph, stop: th.Event):
-    async with websockets.connect(URL) as ws:
-        await ws.send(json.dumps(SUB))
-        while not stop.is_set():
-            try:
-                msg = await asyncio.wait_for(ws.recv(), timeout=0.2)
-            except asyncio.TimeoutError:
-                continue
-            d: dict = json.loads(msg)
-            if d.get("type") == "ticker":
-                graph.add_data(d)
+FPS = 20
 
 def main(screen: Screen):
-
-    MARKET_GRAPH : data.Graph = data.Graph(screen)
-
-    stop = th.Event()
-    update = th.Thread(target=(lambda: asyncio.run(update_data(MARKET_GRAPH, stop))))
-    update.start()
-
+    
+    pair = {
+        'name': 'BTCUSD',
+        'base': 'BTC',
+        'quote': 'USD',
+        'type': 'Crypto',
+        'source': 'biquote'
+    }
+    
+    graph = render.Graph(0, 0, 120, 45, pair, screen)
+    graph.render_frame()
+    i = 0
+    
     while True:
-        MARKET_GRAPH.render_data()
-        time.sleep(FRAME / 1000)
         ev = screen.get_key()
-        if ev in [ord('Q'), ord('q')]:
-            break
-
-    stop.set()
-    update.join()
-
+        if ev:
+            if ev == -204: #up
+                graph.key_up()
+            elif ev == -206: # down
+                graph.key_down()
+            elif ev == 10: # enter
+                graph.key_enter()
+            else:
+                if graph.key(ev):
+                    break
+        
+        i += 1
+        if not i % int(FPS/2): # twice per second
+            graph.fetch_data()
+            
+        graph.render_frame()
+        time.sleep(1 / FPS)
+    
     return
 
-if __name__ == "__main__":
-    f = open('config.jsonc')
-    _data = json.load(f)
-    PRODUCT = _data['market']['product']
-    FRAME = _data['frame']
-    f.close()
-
-    URL = "wss://ws-feed.exchange.coinbase.com"
-    SUB = {
-        "type": "subscribe",
-        "product_ids": [PRODUCT],
-        "channels": ["ticker"],
-    }
-
-    Screen.wrapper(main)
+Screen.wrapper(main)

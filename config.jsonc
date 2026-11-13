@@ -11,5 +11,6 @@
         "rounded": true,
         "color": 7
     },
-    "frame": 1000
+    "frame": 1000,
+    "candle": 20
 }
