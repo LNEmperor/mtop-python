@@ -1,5 +1,4 @@
 import fetchSources as Sources
-
 import requests as rq
 import datetime
 
@@ -29,7 +28,7 @@ def fetch_biquote(name: str):
     
     raw = rq.get(Sources.SOURCES['biquote'][1] + name).json()
     result = {
-        'value': raw['mid'],
+        'value': float(raw['mid']),
         'time': datetime.datetime.strptime(raw['time'], '%Y.%m.%d %T')
     }
     
@@ -39,7 +38,7 @@ def fetch_coinbase(name: str):
     
     raw = rq.get(Sources.SOURCES["coinbase"][1] + name + '/spot').json()
     result = {
-        'value': raw['data']['amount'],
+        'value': float(raw['data']['amount']),
         'time': datetime.datetime.now()
     }
     
@@ -47,10 +46,10 @@ def fetch_coinbase(name: str):
 
 def fetch_binance(name: str):
     
-    raw = rq.get(Sources.SOURCES["binance"][1] + '?symbol=' + name).json()
+    raw = rq.get(Sources.SOURCES["binance"][1] + '?symbol=' + name + '&limit=1').json()
     result = {
-        'value': raw['price'],
-        'time': datetime.datetime.fromtimestamp(raw['closeTime'] / 1000)
+        'value': (float(raw['bids'][0][0]) + float(raw['asks'][0][0])) / 2, # avgPrice only updates every 5 mins so order book is better
+        'time': datetime.datetime.now()
     }
     
     return result
@@ -59,7 +58,7 @@ def fetch_kraken(name: str):
     
     raw = rq.get(Sources.SOURCES["kraken"][1] + "?pair=" + name).json()
     result = {
-        'value': raw['result'][name]['c'][0],
+        'value': float(raw['result'][name]['c'][0]),
         'time': datetime.datetime.now()
     }
     

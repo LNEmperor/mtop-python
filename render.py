@@ -5,6 +5,7 @@ from math import ceil
 import threading
 import datetime
 import json
+import copy
 
 class Graph:
     def __init__(self, x: int, y: int, pair: dict, screen: Screen):
@@ -139,18 +140,27 @@ class Graph:
     
     def render_graph(self):
         
-        OHLC = {} # add last value of last candle to next fro continuity
-
-        for _slice, data in self.history.items():
+        OHLC = {} # DONE add last value of last candle to next fro continuity
+        temp = copy.deepcopy(self.history) # prevent error for size change (thread)
+        for _slice, data in temp.items():
             if _slice > self.width - 12: # too far left # TODO edit / fix
                 continue
 
-            _value = sorted(data, key=lambda a: a['value'], reverse=True)
+            try:
+                last_data = OHLC[_slice - 1]
+                data.append({
+                    'value': last_data['close'],
+                    'time': sorted(self.history[_slice - 1], key=lambda a: (a['time']-datetime.datetime(1970,1,1)).total_seconds())[-1]['time'] # time of last transaction
+                })
+            except KeyError: # last slice doen't exist
+                pass
+
+            _value = sorted(data, key=lambda a: a['value']) # DONE convert to float (comes in as str...) / directly in fetchSources?
             _time = sorted(data, key=lambda a: (a['time']-datetime.datetime(1970,1,1)).total_seconds())
 
 
-            _max = _value[0]['value']
-            _min = _value[-1]['value']
+            _max = _value[-1]['value']
+            _min = _value[0]['value'] # DONE fix low (doesn't render)
             _open = _time[0]['value']
             _close = _time[-1]['value']
 
@@ -174,7 +184,7 @@ class Graph:
 
         for _slice, data in OHLC.items(): # TODO edit _slice (cf l.184)
             low_step = round((data['low'] - graph_min) * step)
-            high_step = round((data['high'] - graph_max) * step)
+            high_step = round((data['high'] - graph_min) * step)
             open_step = round((data['open'] - graph_min) * step)
             close_step = round((data['close'] - graph_min) * step)
 
@@ -182,7 +192,7 @@ class Graph:
             _min = min(open_step, close_step)
             _max = max(open_step, close_step)
 
-            for i in range(low_step, _min): # TODO edit _slice (start from last)
+            for i in range(low_step, _min): # TODO edit _slice (start from latest)
                 self.screen.print_at("│", _slice + self.x + 1, i + self.y + 1, 1 if rise else 2)
 
             for i in range(_min, _max):
@@ -192,6 +202,45 @@ class Graph:
                 self.screen.print_at("│", _slice + self.x + 1, i + self.y + 1, 1 if rise else 2)
 
             # usable: self.height - 2
+
+        # # # # OHLC data render
+        data = list(OHLC.values())[-1]
+        self.screen.print_at(data, 0, 0)
+        placeholders = {
+            'O': 'open',
+            'H': 'high',
+            'L': 'low',
+            'C': 'close'
+        }
+
+        _x = self.x + 1
+        _y = self.y + self.height - 1
+        for _key, _value in placeholders.items():
+            self.screen.print_at(_key, _x, _y, 1 if rise else 2)
+            self.screen.print_at(f': {data[_value]}', _x + 1, _y)
+            _x += len(str(data[_value])) + 4
+
+        _x += 3
+        self.screen.print_at('Start', _x, _y, 1 if list(OHLC.values())[-1]['close'] > start else 2)
+        self.screen.print_at(f': {start}', _x + 5, _y)
+
+        # # # # Global stats
+
+        percentage = round(1 - data['close'] / start, 2)
+        if percentage > 0:
+            percentage = "+" + str(percentage) + "%"
+        else:
+            percentage = str(percentage) + "%"
+
+        change = round(start - data['close'], 2)
+        if change > 0:
+            change = "+" + str(change)
+        else:
+            change = str(change)
+        
+        self.screen.print_at(percentage, self.x + self.width - len(percentage), _y - 2, 1 if list(OHLC.values())[-1]['close'] > start else 2)
+        self.screen.print_at(change, self.x + self.width - len(change), _y - 1, 1 if list(OHLC.values())[-1]['close'] > start else 2)
+        self.screen.print_at(data['close'], self.x + self.width - len(str(data['close'])), _y, 1 if list(OHLC.values())[-1]['close'] > start else 2)
         
         return
     
@@ -222,6 +271,7 @@ class Graph:
         
         self.pair = new_pair
         self.source = new_pair['source']
+        self.history = {}
         
         return
     
@@ -289,11 +339,18 @@ class Graph:
         
         pairs = sum([self.choice['pairs'][i] for i in Sources.SOURCES], [])
         max_length = max([len(a['name']) for a in (pairs + [{'name':current_filter + '_'}])])
+        max_length_source = max([len(a['source']) for a in (pairs + [{'source':''}])])
         
         # Background & filter
         
         for i in range(min(self.max_listed, self.choice['number']) + 1):
             self.screen.print_at(' ' * max_length, self.x + self.width - max_length, self.y + i + self.hovered, 0, 0, 7)
+
+        _start = 1 + (self.choice['scroll'] != 0)
+        _stop = self.choice['number'] + 1 if self.max_listed > (self.choice['number'] + 1) else self.max_listed + (self.choice['scroll'] == self.choice['number'] - self.max_listed)
+
+        for i in range(_start, _stop):
+            self.screen.print_at(' ' * (max_length_source + 3), self.x + self.width, self.y + i + self.hovered, 0, 0, 247) # DONE remove for arrows and input
             
         self.screen.print_at(current_filter + '_', self.x + self.width - max_length, self.y + self.hovered, 0, 0, 7)
         
@@ -311,30 +368,37 @@ class Graph:
         if self.choice['number'] < self.max_listed: # no overflow
             for i in range(len(pairs)):
                 element = pairs[i]['name']
+                source = pairs[i]['source']
                 if i == self.choice['hovered']:
                     self.screen.print_at(' ' * max_length, self.x + self.width - max_length, _y + i)
                     self.screen.print_at(element, self.x + self.width - len(element), _y + i)
                 else:
                     self.screen.print_at(element, self.x + self.width - len(element), _y + i, 0, 0, 7)
                 
+                self.screen.print_at(' - ' + source.capitalize(), self.x + self.width, _y + i, 0, 0, 247)
+                
         else: # overflow
             for i in range(self.max_listed):
                 element_id = i + self.choice['scroll']
-                if element_id >= len(pairs): continue
+                # if element_id >= len(pairs): continue # ?? y tf did I write this?
                 element_height = _y + i
                 element = pairs[element_id]['name']
+                source = pairs[element_id]['source']
                 if element_id == self.choice['hovered']:
                     self.screen.print_at(' ' * max_length, self.x + self.width - max_length, element_height)
                     self.screen.print_at(element, self.x + self.width - len(element), element_height)
                 else:
                     self.screen.print_at(element, self.x + self.width - len(element), element_height, 0, 0, 7)
+
+                if i >= _start - 1 and i < _stop - 1:
+                    self.screen.print_at(' - ' + source.capitalize(), self.x + self.width, element_height, 0, 0, 247)
                 
             if self.choice['scroll']:
                 self.screen.print_at(' ' * max_length, self.x + self.width - max_length, _y, 0, 0, 7)
-                self.screen.print_at("△", self.x + self.width - max_length // 2, _y, 0, 0, 7)
+                self.screen.print_at("△", self.x + self.width - ceil(max_length / 2), _y, 0, 0, 7)
             if self.choice['scroll'] != self.choice['number'] - self.max_listed:
                 self.screen.print_at(' ' * max_length, self.x + self.width - max_length, _y + self.max_listed - 1, 0, 0, 7)
-                self.screen.print_at("▽", self.x + self.width - max_length // 2, _y + self.max_listed - 1, 0, 0, 7)
+                self.screen.print_at("▽", self.x + self.width - ceil(max_length / 2), _y + self.max_listed - 1, 0, 0, 7)
         
         return
     
@@ -349,7 +413,7 @@ class Graph:
     def move_choice_down(self):
         
         self.choice['hovered'] = max(min(self.choice['hovered'] + 1, self.choice['number'] - 1), 0)
-        if self.choice['hovered'] > self.max_listed + self.choice['scroll'] - 2 and self.choice["hovered"] != self.choice['number'] - 1: # idk y the second but it works so don't touch
+        if self.choice['hovered'] > self.max_listed + self.choice['scroll'] - 2 and self.choice["hovered"] != self.choice['number'] - 1: # idk y but it works so don't touch
             self.choice['scroll'] += 1
         
         return
@@ -404,7 +468,7 @@ class Graph:
                 self.update_choices(True)
             self.selected = True
         else: # already filtering
-            self.update_pair()
+            self.update_pair() # TODO fix is list empty
             self.selected = False
         return
 
@@ -412,5 +476,7 @@ class Graph:
 #   [x] take sources from module Sources
 #   [x] implement fetch process
 #   [x] add graph
-#   [ ] fix graph
+#   [x] fix graph
+#   [ ] add price render
+#   [ ] add OHLC render
 #   [ ] add live websocket

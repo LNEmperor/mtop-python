@@ -1,3 +1,5 @@
+#!env/bin/python3
+
 from asciimatics.screen import Screen
 import render as render
 import time
@@ -55,13 +57,13 @@ def main(screen: Screen):
             else:
                 if graph.key(ev):
                     break
+
+        graph.render_frame()
         
         i += 1
         if not i % int(FPS / 2): # twice per second
             graph.fetch_data()
-            graph.render_frame()
 
-        graph.render_frame()
         time.sleep(1 / FPS)
     
     return

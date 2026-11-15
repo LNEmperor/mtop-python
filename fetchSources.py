@@ -2,7 +2,7 @@ import requests as rq
 import json
 
 BINANCE_LIST    = "https://api.binance.com/api/v3/exchangeInfo"
-BINANCE_URL     = "https://api.binance.com/api/v3/avgPrice" # + f"?symbol={name}"
+BINANCE_URL     = "https://api.binance.com/api/v3/depth" # + f"?symbol={name}"
 BINANCE_WSS     = "wss://stream.binance.com:9443/ws/" # + f"{name}@avgPrice"
 
 COINBASE_LIST   = "https://api.exchange.coinbase.com/products"
