@@ -177,35 +177,35 @@ class Graph:
         graph_max = max(map(lambda a: a['high'], OHLC.values()))
         graph_min = min(map(lambda a: a['low'], OHLC.values()))
 
-        step = (self.height - 2) / (graph_max - graph_min + 1)
+        step = (self.height - 3) / (graph_max - graph_min + 1)
 
         for i in range(1, self.width - 11):
-            self.screen.print_at('┄', i, ceil((start - graph_min) * step) + 1, 1 if list(OHLC.values())[-1]['close'] > start else 2)
+            self.screen.print_at('┄', i, ceil((graph_max - start) * step) + 1, 2 if list(OHLC.values())[-1]['close'] > start else 1)
 
         for _slice, data in OHLC.items(): # TODO edit _slice (cf l.184)
-            low_step = round((data['low'] - graph_min) * step)
-            high_step = round((data['high'] - graph_min) * step)
-            open_step = round((data['open'] - graph_min) * step)
-            close_step = round((data['close'] - graph_min) * step)
+            low_step = round((graph_max - data['low']) * step)
+            high_step = round((graph_max - data['high']) * step)
+            open_step = round((graph_max - data['open']) * step)
+            close_step = round((graph_max - data['close']) * step)
 
             rise = data['open'] < data['close']
             _min = min(open_step, close_step)
             _max = max(open_step, close_step)
 
-            for i in range(low_step, _min): # TODO edit _slice (start from latest)
-                self.screen.print_at("│", _slice + self.x + 1, i + self.y + 1, 1 if rise else 2)
+            for i in range(high_step, _min): # TODO edit _slice (start from latest)
+                self.screen.print_at("│", _slice + self.x + 1, i + self.y + 1, 2 if rise else 1)
 
             for i in range(_min, _max):
-                self.screen.print_at("█", _slice + self.x + 1, i + self.y + 1, 1 if rise else 2)
+                self.screen.print_at("█", _slice + self.x + 1, i + self.y + 1, 2 if rise else 1)
             
-            for i in range(_max, high_step):
-                self.screen.print_at("│", _slice + self.x + 1, i + self.y + 1, 1 if rise else 2)
+            for i in range(_max, low_step):
+                self.screen.print_at("│", _slice + self.x + 1, i + self.y + 1, 2 if rise else 1)
 
             # usable: self.height - 2
 
         # # # # OHLC data render
+        
         data = list(OHLC.values())[-1]
-        self.screen.print_at(data, 0, 0)
         placeholders = {
             'O': 'open',
             'H': 'high',
@@ -216,12 +216,12 @@ class Graph:
         _x = self.x + 1
         _y = self.y + self.height - 1
         for _key, _value in placeholders.items():
-            self.screen.print_at(_key, _x, _y, 1 if rise else 2)
+            self.screen.print_at(_key, _x, _y, 2 if rise else 1)
             self.screen.print_at(f': {data[_value]}', _x + 1, _y)
             _x += len(str(data[_value])) + 4
 
         _x += 3
-        self.screen.print_at('Start', _x, _y, 1 if list(OHLC.values())[-1]['close'] > start else 2)
+        self.screen.print_at('Start', _x, _y, 2 if list(OHLC.values())[-1]['close'] > start else 1)
         self.screen.print_at(f': {start}', _x + 5, _y)
 
         # # # # Global stats
@@ -232,15 +232,15 @@ class Graph:
         else:
             percentage = str(percentage) + "%"
 
-        change = round(start - data['close'], 2)
+        change = round(data['close'] - start, 2)
         if change > 0:
             change = "+" + str(change)
         else:
             change = str(change)
         
-        self.screen.print_at(percentage, self.x + self.width - len(percentage), _y - 2, 1 if list(OHLC.values())[-1]['close'] > start else 2)
-        self.screen.print_at(change, self.x + self.width - len(change), _y - 1, 1 if list(OHLC.values())[-1]['close'] > start else 2)
-        self.screen.print_at(data['close'], self.x + self.width - len(str(data['close'])), _y, 1 if list(OHLC.values())[-1]['close'] > start else 2)
+        self.screen.print_at(percentage, self.x + self.width - len(percentage), _y - 2, 2 if list(OHLC.values())[-1]['close'] > start else 1)
+        self.screen.print_at(change, self.x + self.width - len(change), _y - 1, 2 if list(OHLC.values())[-1]['close'] > start else 1)
+        self.screen.print_at(data['close'], self.x + self.width - len(str(data['close'])), _y, 2 if list(OHLC.values())[-1]['close'] > start else 1)
         
         return
     
