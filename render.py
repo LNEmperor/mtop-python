@@ -1,23 +1,30 @@
 from asciimatics.screen import Screen
 import fetchSources as Sources
 import fetchLive as Fetch
-import time
+from math import ceil
+import threading
+import datetime
 import json
 
 class Graph:
-    def __init__(self, x: int, y: int, width: int, heigth: int, pair: dict, screen: Screen):
+    def __init__(self, x: int, y: int, pair: dict, screen: Screen):
         self.x: int = x
         self.y: int = y
-        self.width: int = width
-        self.heigth: int = heigth
-        self.rounded: bool = False
+        with open('config.jsonc') as config:
+            data = json.load(config)
+            self.width: int = data['market']['width']
+            self.height: int = data['market']['height']
+            self.slice: int = data['market']['slice']
+            self.rounded: bool = data['boxes']['rounded']
         
         self.pair: dict = pair
         self.source: str = self.pair['source']
         
         self.screen: Screen = screen
         
-        self.history: list[dict] = []
+        self.history: dict[int, list] = {}
+        self.start: datetime.datetime = datetime.datetime.now() # DONE fix: lock on server time
+        self.now: datetime.datetime = datetime.datetime.now()
         
         self.selected: bool = False
         self.hovered: int = 0
@@ -41,19 +48,39 @@ class Graph:
 
     def fetch_data(self):
 
+        # return # test to see if lags exists
+
         if self.pair['source'] in Sources.SOURCES.keys():
             try:
-                data = Fetch.fetch(self.pair['name'])
-            except json.JSONDecodeError:
-                data = None
 
-            self.add_data(data)
+                def _fetch():
+                    data = Fetch.fetch(self.pair['source'], self.pair['name'])
+                    self.add_data(data)
+
+                thread = threading.Thread(target=_fetch, args=())
+                thread.start()
+
+                # data = Fetch.fetch(self.pair['source'], self.pair['name']) # DONE edit, create lags due to response delay (thread?)
+
+                # self.add_data(data)
+
+            except json.JSONDecodeError: # not foratted response
+                pass
+            except: # connection error (probably)
+                pass
 
         return
     
     def add_data(self, data: dict):
+
+        if self.history == {}: # first data on this value
+            self.start = data['time']
         
-        self.history.append(data)
+        slice_id: int = int((data['time'] - self.start).total_seconds() // self.slice)
+        try:
+            self.history[slice_id].append(data)
+        except KeyError:
+            self.history[slice_id] = [data]
         
         return
     
@@ -62,10 +89,12 @@ class Graph:
         self.screen.clear_buffer(Screen.COLOUR_WHITE, 0, Screen.COLOUR_BLACK)
         
         self.render_box()
+        self.render_graph()
         self.render_data()
         if self.selected: self.render_choices()
 
-        self.screen.print_at(self.pair, 0, 0)
+        # self.screen.print_at(self.history, 0, 0)
+        # self.screen.print_at(' .' * 45, 0, 0)
         
         # self.screen.print_at(self.choice['number'], 0, 10)
         # self.screen.print_at(self.hovered, 0, 11)
@@ -110,7 +139,59 @@ class Graph:
     
     def render_graph(self):
         
-        # TODO
+        OHLC = {} # add last value of last candle to next fro continuity
+
+        for _slice, data in self.history.items():
+            if _slice > self.width - 12: # too far left # TODO edit / fix
+                continue
+
+            _value = sorted(data, key=lambda a: a['value'], reverse=True)
+            _time = sorted(data, key=lambda a: (a['time']-datetime.datetime(1970,1,1)).total_seconds())
+
+
+            _max = _value[0]['value']
+            _min = _value[-1]['value']
+            _open = _time[0]['value']
+            _close = _time[-1]['value']
+
+            OHLC[_slice] = {
+                'open': _open,
+                'high': _max,
+                'low': _min,
+                'close': _close
+            }
+
+        if len(OHLC) == 0: return
+
+        start = list(OHLC.values())[0]['open']
+        graph_max = max(map(lambda a: a['high'], OHLC.values()))
+        graph_min = min(map(lambda a: a['low'], OHLC.values()))
+
+        step = (self.height - 2) / (graph_max - graph_min + 1)
+
+        for i in range(1, self.width - 11):
+            self.screen.print_at('┄', i, ceil((start - graph_min) * step) + 1, 1 if list(OHLC.values())[-1]['close'] > start else 2)
+
+        for _slice, data in OHLC.items(): # TODO edit _slice (cf l.184)
+            low_step = round((data['low'] - graph_min) * step)
+            high_step = round((data['high'] - graph_max) * step)
+            open_step = round((data['open'] - graph_min) * step)
+            close_step = round((data['close'] - graph_min) * step)
+
+            rise = data['open'] < data['close']
+            _min = min(open_step, close_step)
+            _max = max(open_step, close_step)
+
+            for i in range(low_step, _min): # TODO edit _slice (start from last)
+                self.screen.print_at("│", _slice + self.x + 1, i + self.y + 1, 1 if rise else 2)
+
+            for i in range(_min, _max):
+                self.screen.print_at("█", _slice + self.x + 1, i + self.y + 1, 1 if rise else 2)
+            
+            for i in range(_max, high_step):
+                self.screen.print_at("│", _slice + self.x + 1, i + self.y + 1, 1 if rise else 2)
+
+            # usable: self.height - 2
         
         return
     
@@ -125,9 +206,9 @@ class Graph:
         bot = botl + (self.width - 12) * '─' + '┴' + 10 * '─' + botr
         
         self.screen.print_at(top, self.x, self.y)
-        self.screen.print_at(bot, self.x, self.y + self.heigth)
+        self.screen.print_at(bot, self.x, self.y + self.height)
         
-        for i in range(1, self.heigth):
+        for i in range(1, self.height):
             self.screen.print_at('│', self.x, self.y + i)
             self.screen.print_at('│', self.x + self.width - 11, self.y + i)
             self.screen.print_at('│', self.x + self.width, self.y + i)
@@ -240,13 +321,13 @@ class Graph:
             for i in range(self.max_listed):
                 element_id = i + self.choice['scroll']
                 if element_id >= len(pairs): continue
-                element_heigth = _y + i
+                element_height = _y + i
                 element = pairs[element_id]['name']
                 if element_id == self.choice['hovered']:
-                    self.screen.print_at(' ' * max_length, self.x + self.width - max_length, element_heigth)
-                    self.screen.print_at(element, self.x + self.width - len(element), element_heigth)
+                    self.screen.print_at(' ' * max_length, self.x + self.width - max_length, element_height)
+                    self.screen.print_at(element, self.x + self.width - len(element), element_height)
                 else:
-                    self.screen.print_at(element, self.x + self.width - len(element), element_heigth, 0, 0, 7)
+                    self.screen.print_at(element, self.x + self.width - len(element), element_height, 0, 0, 7)
                 
             if self.choice['scroll']:
                 self.screen.print_at(' ' * max_length, self.x + self.width - max_length, _y, 0, 0, 7)
@@ -287,9 +368,10 @@ class Graph:
             self.reset_choice(True)
             self.update_choices()
         else:
-            self.screen.print_at(code, 0, 0)
-            self.screen.refresh()
-            time.sleep(1)
+            pass
+            # self.screen.print_at(code, 0, 0)
+            # self.screen.refresh()
+            # time.sleep(1)
         return False
     
     def key_up(self):
@@ -309,6 +391,7 @@ class Graph:
         return
     
     def key_enter(self):
+        if not self.hovered: return # if market not selected
         if not self.selected: # not filtering
             if self.hovered == 1: # base
                 self.choice['filters']['base'] = self.pair['base']
@@ -327,6 +410,7 @@ class Graph:
 
 # TODO:
 #   [x] take sources from module Sources
-#   [ ] implement fetch process
-#   [ ] add graph
+#   [x] implement fetch process
+#   [x] add graph
+#   [ ] fix graph
 #   [ ] add live websocket

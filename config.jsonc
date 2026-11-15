@@ -8,9 +8,7 @@
         "slice": 10
     },
     "boxes": {
-        "rounded": true,
-        "color": 7
+        "rounded": true
     },
-    "frame": 1000,
-    "candle": 20
+    "fps": 60
 }
