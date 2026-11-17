@@ -24,12 +24,12 @@ BIQUOTE_URL     = "https://biquote.io/api/" # + name
 BIQUOTE_WSS     = None
 
 SOURCES = {
+    "biquote": [BIQUOTE_LIST, BIQUOTE_URL, BIQUOTE_WSS],
     "binance": [BINANCE_LIST, BINANCE_URL, BINANCE_WSS],
     "coinbase": [COINBASE_LIST, COINBASE_URL, COINBASE_WSS],
     "kraken": [KRAKEN_LIST, KRAKEN_URL, KRAKEN_WSS],
     # "bitstamp": [BITSTAMP_LIST, BITSTAMP_URL],
     # "bitflex": [BITFINEX_LIST, BITFINEX_URL]
-    "biquote": [BIQUOTE_LIST, BIQUOTE_URL, BIQUOTE_WSS]
 }
 
 def fetch_list_from(source: str):

@@ -1,9 +1,11 @@
+from ssl import _OPENSSL_API_VERSION
 from asciimatics.screen import Screen
 import fetchSources as Sources
 import fetchLive as Fetch
 from math import ceil
 import threading
 import datetime
+import time
 import json
 import copy
 
@@ -22,6 +24,7 @@ class Graph:
         self.source: str = self.pair['source']
         
         self.screen: Screen = screen
+        self.rendering: bool = False
         
         self.history: dict[int, list] = {}
         self.start: datetime.datetime = datetime.datetime.now() # DONE fix: lock on server time
@@ -56,6 +59,10 @@ class Graph:
 
                 def _fetch():
                     data = Fetch.fetch(self.pair['source'], self.pair['name'])
+
+                    while self.rendering:
+                        time.sleep(0.05)
+
                     self.add_data(data)
 
                 thread = threading.Thread(target=_fetch, args=())
@@ -86,6 +93,8 @@ class Graph:
         return
     
     def render_frame(self):
+
+        self.rendering = True
         
         self.screen.clear_buffer(Screen.COLOUR_WHITE, 0, Screen.COLOUR_BLACK)
         
@@ -104,6 +113,8 @@ class Graph:
         # self.screen.print_at(f"{self.choice['filters']['base']} {self.choice['filters']['quote']}", 0, 14)
         
         self.screen.refresh()
+
+        self.rendering = False
         
         return
     
@@ -142,8 +153,14 @@ class Graph:
         
         OHLC = {} # DONE add last value of last candle to next fro continuity
         temp = copy.deepcopy(self.history) # prevent error for size change (thread)
-        for _slice, data in temp.items():
-            if _slice > self.width - 12: # too far left # TODO edit / fix
+        _start = max(0, len(temp) - self.width + 12)
+        _stop = len(temp)
+        datas = list(temp.values())
+        for _slice in range(_start, _stop):
+        # for _slice, data in temp.items():
+            try:
+                data = datas[_slice]
+            except:
                 continue
 
             try:
@@ -182,7 +199,9 @@ class Graph:
         for i in range(1, self.width - 11):
             self.screen.print_at('┄', i, ceil((graph_max - start) * step) + 1, 2 if list(OHLC.values())[-1]['close'] > start else 1)
 
-        for _slice, data in OHLC.items(): # TODO edit _slice (cf l.184)
+        for _slice in range(_start, _stop):
+            data = OHLC[_slice]
+
             low_step = round((graph_max - data['low']) * step)
             high_step = round((graph_max - data['high']) * step)
             open_step = round((graph_max - data['open']) * step)
@@ -192,14 +211,16 @@ class Graph:
             _min = min(open_step, close_step)
             _max = max(open_step, close_step)
 
-            for i in range(high_step, _min): # TODO edit _slice (start from latest)
-                self.screen.print_at("│", _slice + self.x + 1, i + self.y + 1, 2 if rise else 1)
+            _x = _slice + self.x + 1 + min(0, self.width - 12 - _stop)
+
+            for i in range(high_step, _min):
+                self.screen.print_at("│", _x, i + self.y + 1, 2 if rise else 1)
 
             for i in range(_min, _max):
-                self.screen.print_at("█", _slice + self.x + 1, i + self.y + 1, 2 if rise else 1)
+                self.screen.print_at("█", _x, i + self.y + 1, 2 if rise else 1)
             
             for i in range(_max, low_step):
-                self.screen.print_at("│", _slice + self.x + 1, i + self.y + 1, 2 if rise else 1)
+                self.screen.print_at("│", _x, i + self.y + 1, 2 if rise else 1)
 
             # usable: self.height - 2
 
